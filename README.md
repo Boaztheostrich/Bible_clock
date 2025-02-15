@@ -11,3 +11,9 @@ But instead of charging $200, that is what I believe the price is as of writing 
 ^ pricing is revealed if you give them your email.
 
 I also wanted to try to make mine "available" before theirs, not in the case of I am actively selling them but meaning the guide is available.
+
+You should be able to use the code in the boaz tf test folder to get the bible verses showing up on your display. You will need to add your own wifi and password to get it to work on your network.
+
+The python program is designed to help you select verses I have also included the .csv file I used for mine.
+
+You can use the website to generate the .bin files which you then drop onto the micro sd card, 32gb reccomended.
