@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bible Verse Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      background-color: #f0f0f0;
+    }
+    .container {
+      width: 400px;
+      max-width: 100%;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin: 4px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin: 20px 0;
+    }
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .checkbox-container input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Bible Verse Generator</h1>
+    <input type="text" id="reference" placeholder="Reference" value="Genesis 1:1">
+    <textarea id="verse" rows="4">In the beginning God created the heaven and the earth.</textarea>
+    <input type="text" id="version" placeholder="Version" value="King James Version (KJV)">
+
+    <div class="checkbox-container">
+      <input type="checkbox" id="invertColorsCheckbox" onclick="generateImage()">
+      <label for="invertColorsCheckbox">Invert Colors</label>
+    </div>
+
+    <button onclick="generateImage()">Generate Image</button>
+    <canvas id="canvas" width="400" height="300"></canvas>
+    <button onclick="downloadImage()">Download PNG Image</button>
+    <button onclick="downloadEPaperHeader()">Download EPaper Header</button>
+    <button onclick="downloadIndividualBin()">Download BIN Image</button>  <hr style="margin:30px 0; width:100%;">
+
+    <h2>Import CSV for Multiple Images</h2>
+    <input type="file" id="csvFile" accept=".csv">
+    <button onclick="processCSV()">Generate Images from CSV</button>
+    <button onclick="processCSVBin()">Generate BIN from CSV</button>
+  </div>
+
+  <script>
+    // Global elements and variables for manual generation
+    const referenceInput = document.getElementById('reference');
+    const verseInput = document.getElementById('verse');
+    const versionInput = document.getElementById('version');
+    const canvas = document.getElementById('canvas');
+    const invertColorsCheckbox = document.getElementById('invertColorsCheckbox'); // Get checkbox element
+    let currentReference = referenceInput.value;
+    let currentVerse = verseInput.value;
+    let currentVersion = versionInput.value;
+    let isInverted = invertColorsCheckbox.checked; // Initialize inversion state
+
+    // Update inversion state and regenerate on checkbox change
+    invertColorsCheckbox.addEventListener('change', (e) => {
+      isInverted = e.target.checked;
+      generateImage();
+    });
+
+    // Update values on input (manual mode)
+    referenceInput.addEventListener('input', (e) => {
+      currentReference = e.target.value;
+      generateImage();
+    });
+    verseInput.addEventListener('input', (e) => {
+      currentVerse = e.target.value;
+      generateImage();
+    });
+    versionInput.addEventListener('input', (e) => {
+      currentVersion = e.target.value;
+      generateImage();
+    });
+
+    // Helper: Break text into multiple lines given a max width.
+    function getLines(ctx, text, maxWidth, fontSize) {
+      ctx.font = `${fontSize}px Arial`;
+      const words = text.split(' ');
+      const lines = [];
+      let line = '';
+      while (words.length > 0) {
+        const split = words.shift();
+        const testLine = line + (line === '' ? '' : ' ') + split;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth) {
+          if (line === '') {
+            lines.push(testLine);
+          } else {
+            lines.push(line);
+            words.unshift(split);
+          }
+          line = '';
+        } else {
+          line = testLine;
+        }
+      }
+      if (line !== '') lines.push(line);
+      return lines;
+    }
+
+    // Manual image generation using current global values.
+    function generateImage() {
+      const ctx = canvas.getContext('2d');
+      const backgroundColor = isInverted ? "black" : "white"; // Determine background color based on inversion
+      const textColor = isInverted ? "white" : "black";       // Determine text color based on inversion
+
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Expecting "Book Chapter:Verse" (e.g., "Genesis 1:1")
+      const parts = currentReference.match(/^(.*?)\s+(\d+:\d+)$/);
+      if (!parts) return;
+      const book = parts[1];
+      const verseRef = parts[2];
+
+      // Draw the reference text at the top
+      ctx.font = "24px Arial";
+      ctx.textAlign = "left";
+      ctx.fillStyle = textColor; // Use determined text color
+      const bookWidth = ctx.measureText(book).width;
+      const verseWidth = ctx.measureText(verseRef).width;
+      const totalWidth = bookWidth + verseWidth + 10;
+      const startX = (canvas.width - totalWidth) / 2;
+      ctx.fillText(book, startX, 40);
+      ctx.font = `bold 24px Arial`;
+      ctx.fillText(verseRef, startX + bookWidth + 4, 40);
+
+      // Prepare the verse text
+      const maxWidth = 320;
+      let fontSize = 28;
+      ctx.font = `${fontSize}px Arial`;
+      const maxTextHeight = 180; // maximum text box height
+      let lines = getLines(ctx, currentVerse, maxWidth, fontSize);
+      let textHeight = lines.length * fontSize * 1.4;
+
+      // Adjust font size if text is too tall
+      while (textHeight > maxTextHeight && fontSize > 14) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px Arial`;
+        lines = getLines(ctx, currentVerse, maxWidth, fontSize);
+        textHeight = lines.length * fontSize * 1.4;
+      }
+
+      const padding = 40;
+      const rectHeight = Math.max(100, textHeight + padding);
+      const rectY = (canvas.height - rectHeight) / 2;
+
+      // Draw background rectangle for verse text
+      ctx.fillStyle = textColor; // Use determined text color for rectangle
+      ctx.beginPath();
+      ctx.roundRect(20, rectY, 360, rectHeight, 20);
+      ctx.fill();
+
+      // Draw the verse text
+      ctx.fillStyle = backgroundColor; // Use determined background color for verse text
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      const textY = rectY + (rectHeight - textHeight) / 2 + fontSize;
+      lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, textY + i * fontSize * 1.4);
+      });
+
+      // Draw the version at the bottom
+      ctx.fillStyle = textColor; // Use determined text color for version
+      ctx.font = "18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(currentVersion, canvas.width / 2, canvas.height - 20);
+    }
+
+    // Similar to generateImage(), but uses CSV data.
+    // data is expected to have: Book, Chapter, Verse, Text (and Time for the file name)
+    function generateImageForData(data, version) {
+      const ctx = canvas.getContext('2d');
+      const backgroundColor = isInverted ? "black" : "white"; // Determine background color based on inversion
+      const textColor = isInverted ? "white" : "black";       // Determine text color based on inversion
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const reference = data.Book + " " + data.Chapter + ":" + data.Verse;
+      const parts = reference.match(/^(.*?)\s+(\d+:\d+)$/);
+      if (!parts) return;
+      const book = parts[1];
+      const verseRef = parts[2];
+
+      ctx.font = "24px Arial";
+      ctx.textAlign = "left";
+      ctx.fillStyle = textColor; // Use determined text color
+      const bookWidth = ctx.measureText(book).width;
+      const verseWidth = ctx.measureText(verseRef).width;
+      const totalWidth = bookWidth + verseWidth + 10;
+      const startX = (canvas.width - totalWidth) / 2;
+      ctx.fillText(book, startX, 40);
+      ctx.font = `bold 24px Arial`;
+      ctx.fillText(verseRef, startX + bookWidth + 4, 40);
+
+      const maxWidth = 320;
+      let fontSize = 28;
+      ctx.font = `${fontSize}px Arial`;
+      const maxTextHeight = 180;
+      let lines = getLines(ctx, data.Text, maxWidth, fontSize);
+      let textHeight = lines.length * fontSize * 1.4;
+
+      while (textHeight > maxTextHeight && fontSize > 14) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px Arial`;
+        lines = getLines(ctx, data.Text, maxWidth, fontSize);
+        textHeight = lines.length * fontSize * 1.4;
+      }
+
+      const padding = 40;
+      const rectHeight = Math.max(100, textHeight + padding);
+      const rectY = (canvas.height - rectHeight) / 2;
+
+      ctx.fillStyle = textColor; // Use determined text color for rectangle
+      ctx.beginPath();
+      ctx.roundRect(20, rectY, 360, rectHeight, 20);
+      ctx.fill();
+
+      ctx.fillStyle = backgroundColor; // Use determined background color for verse text
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      const textY = rectY + (rectHeight - textHeight) / 2 + fontSize;
+      lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, textY + i * fontSize * 1.4);
+      });
+
+      ctx.fillStyle = textColor; // Use determined text color for version
+      ctx.font = "18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(version, canvas.width / 2, canvas.height - 20);
+    }
+
+
+    // Download the current canvas as a PNG image (manual mode)
+    function downloadImage() {
+      const link = document.createElement('a');
+      link.download = 'bible_verse.png';
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+
+    // Convert the canvas to a 1-bit (monochrome) EPaper format string.
+function convertCanvasToMonochrome(canvas, threshold = 128) {
+  const ctx = canvas.getContext('2d');
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  let output = "";
+  let byte = 0;
+  let bitCount = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+    const bitValue = (brightness < threshold) ? 1 : 0; // Dark pixels -> 1, Light pixels -> 0
+
+    byte = (byte << 1) | bitValue;
+    bitCount++;
+    if (bitCount === 8) {
+      // Remove the inversion check here
+      output += "0x" + byte.toString(16).padStart(2, '0') + ", ";
+      byte = 0;
+      bitCount = 0;
+    }
+  }
+  if (bitCount > 0) {
+    byte = byte << (8 - bitCount);
+    output += "0x" + byte.toString(16).padStart(2, '0') + ", ";
+  }
+  return output;
+}
+
+
+
+    // Download the current canvas as an EPaper header file (manual mode)
+    function downloadEPaperHeader() {
+      const headerData = convertCanvasToMonochrome(canvas, 128);
+      const headerContent = `
+const unsigned char epd_bitmap_YourDesign[] PROGMEM = {
+  ${headerData}
+};
+`;
+      const blob = new Blob([headerContent], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.download = 'epd_bitmap_YourDesign.h';
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    }
+
+    // New function to download individual BIN file
+    function downloadIndividualBin() {
+      const headerData = convertCanvasToMonochrome(canvas, 128);
+      const binBlob = hexToBinBlob(headerData);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(binBlob);
+      link.download = 'bible_verse.bin'; // Default filename for individual BIN
+      link.click();
+    }
+
+
+    // A simple CSV parser that returns an array of arrays.
+    function parseCSV(text) {
+      const rows = [];
+      const lines = text.split(/\r?\n/);
+      for (let line of lines) {
+        if (!line.trim()) continue; // skip empty lines
+        const row = [];
+        let inQuotes = false;
+        let field = '';
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              field += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            row.push(field);
+            field = '';
+          } else {
+            field += char;
+          }
+        }
+        row.push(field);
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    // Function to convert hex string to binary blob
+    function hexToBinBlob(hexString) {
+        const hexValues = hexString.replace(/\s/g, '').split(',').filter(Boolean);
+        const byteArray = new Uint8Array(hexValues.length);
+        for (let i = 0; i < hexValues.length; i++) {
+            byteArray[i] = parseInt(hexValues[i], 16);
+        }
+        return new Blob([byteArray], { type: 'application/octet-stream'});
+    }
+
+
+    // Process the uploaded CSV file and generate BIN files in a ZIP.
+    async function processCSVBin() {
+      const fileInput = document.getElementById('csvFile');
+      if (fileInput.files.length === 0) {
+        alert("Please select a CSV file.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const csvText = e.target.result;
+        const rows = parseCSV(csvText);
+        if (rows.length < 2) {
+          alert("CSV file is empty or invalid.");
+          return;
+        }
+        // Assume the first row is the header: Time,Book,Chapter,Verse,Text
+        const headers = rows[0];
+        const timeIndex = headers.indexOf("Time");
+        const bookIndex = headers.indexOf("Book");
+        const chapterIndex = headers.indexOf("Chapter");
+        const verseIndex = headers.indexOf("Verse");
+        const textIndex = headers.indexOf("Text");
+
+        if (timeIndex === -1 || bookIndex === -1 || chapterIndex === -1 || verseIndex === -1 || textIndex === -1) {
+          alert("CSV headers are missing required fields.");
+          return;
+        }
+
+        const zip = new JSZip();
+
+        // Process each CSV row (skip the header row)
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < headers.length) continue;
+          const data = {
+            Time: row[timeIndex],
+            Book: row[bookIndex],
+            Chapter: row[chapterIndex],
+            Verse: row[verseIndex],
+            Text: row[textIndex]
+          };
+
+          // Generate the image for this row (needed for convertCanvasToMonochrome)
+          generateImageForData(data, versionInput.value);
+
+          // Build a base file name using the Time field (replace colon with hyphen)
+          const baseName = data.Time.replace(/:/g, '_');
+          const binFileName = baseName + ".bin";
+
+          // Convert canvas to EPaper header string - now respecting inversion
+          const headerData = convertCanvasToMonochrome(canvas, 128);
+          // Convert hex string data to binary blob
+          const binBlob = hexToBinBlob(headerData);
+
+          // Add BIN file to the ZIP archive
+          zip.file(binFileName, binBlob);
+        }
+
+        // Create the ZIP file and trigger its download.
+        const content = await zip.generateAsync({ type: "blob" });
+        const zipLink = document.createElement("a");
+        zipLink.href = URL.createObjectURL(content);
+        zipLink.download = "bible_verses_bin.zip";
+        zipLink.click();
+
+
+      };
+      reader.readAsText(file);
+    }
+
+
+    // Process the uploaded CSV file.
+    // For each CSV row, generate a PNG and a header file.
+    // In addition, accumulate all header file content into one combined header file (_combined).
+    async function processCSV() {
+      const fileInput = document.getElementById('csvFile');
+      if (fileInput.files.length === 0) {
+        alert("Please select a CSV file.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const csvText = e.target.result;
+        const rows = parseCSV(csvText);
+        if (rows.length < 2) {
+          alert("CSV file is empty or invalid.");
+          return;
+        }
+        // Assume the first row is the header: Time,Book,Chapter,Verse,Text
+        const headers = rows[0];
+        const timeIndex = headers.indexOf("Time");
+        const bookIndex = headers.indexOf("Book");
+        const chapterIndex = headers.indexOf("Chapter");
+        const verseIndex = headers.indexOf("Verse");
+        const textIndex = headers.indexOf("Text");
+
+        if (timeIndex === -1 || bookIndex === -1 || chapterIndex === -1 || verseIndex === -1 || textIndex === -1) {
+          alert("CSV headers are missing required fields.");
+          return;
+        }
+
+        const zip = new JSZip();
+        let combinedHeaders = "// Combined header file\n\n";
+
+        // Process each CSV row (skip the header row)
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < headers.length) continue;
+          const data = {
+            Time: row[timeIndex],
+            Book: row[bookIndex],
+            Chapter: row[chapterIndex],
+            Verse: row[verseIndex],
+            Text: row[textIndex]
+          };
+
+          // Generate the image for this row
+          generateImageForData(data, versionInput.value);
+
+          // Build a base file name using the Time field (replace colon with hyphen)
+          const baseName = data.Time.replace(/:/g, '_');
+          const pngFileName = baseName + ".png";
+          const headerFileName = baseName + ".h";
+
+          // Get PNG image data (base64 string without prefix)
+          const pngData = canvas.toDataURL().split(',')[1];
+          // Convert canvas to EPaper header string - now respecting inversion
+          const headerData =
+`// Image for ${data.Time} - ${data.Book} ${data.Chapter}:${data.Verse}
+const unsigned char epd_bitmap_${baseName}[] PROGMEM = {
+  ${convertCanvasToMonochrome(canvas, 128)}
+};
+
+`;
+          // Add individual PNG and header files to the ZIP archive.
+          zip.file(pngFileName, pngData, { base64: true });
+          zip.file(headerFileName, headerData);
+          // Append the headerData to our combined header file string.
+          combinedHeaders += headerData;
+        }
+
+        // Add the combined header file to the ZIP (named with "_combined")
+        zip.file("bible_verses_combined.h", combinedHeaders);
+
+        // Create the ZIP file and trigger its download.
+        const content = await zip.generateAsync({ type: "blob" });
+        const zipLink = document.createElement("a");
+        zipLink.href = URL.createObjectURL(content);
+        zipLink.download = "bible_verses.zip";
+        zipLink.click();
+      };
+      reader.readAsText(file);
+    }
+
+
+    // Draw an initial image in manual mode.
+    generateImage();
+  </script>
+</body>
+</html>
