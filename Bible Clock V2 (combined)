@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bible Verse Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      background-color: #f0f0f0;
+    }
+    .container {
+      width: 400px;
+      max-width: 100%;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin: 4px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin: 20px 0;
+    }
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .checkbox-container input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+    }
+    .input-group {
+      margin: 20px 0;
+    }
+    .button-group {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+    }
+    .verse-option {
+      border-radius: 4px;
+    }
+    #selectedVersesTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    #selectedVersesTable th, #selectedVersesTable td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    #selectedVersesTable th {
+      background-color: #f4f4f4;
+    }
+  </style>
+  <!-- JSZip for ZIP file generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+  <!-- QRCode.js for generating QR codes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Move navigation link to top -->
+    <div class="nav-links" style="margin-bottom: 20px;">
+      <a href="https://codepen.io/Boaztheostrich/pen/azbOXVR?editors=1001">Go to Verse Selection Tool →</a>
+    </div>
+    
+    <h1>Bible Verse Generator</h1>
+    
+    <input type="text" id="reference" placeholder="Reference" value="Genesis 1:1">
+    <textarea id="verse" rows="4">In the beginning God created the heavens and the earth.</textarea>
+    <input type="text" id="version" placeholder="Version" value="New International Version (NIV)">
+    
+    <div class="checkbox-container">
+      <input type="checkbox" id="invertColorsCheckbox">
+      <label for="invertColorsCheckbox">Invert Colors</label>
+    </div>
+    <!-- Checkbox for QR code generation -->
+    <div class="checkbox-container">
+      <input type="checkbox" id="generateQRCheckbox">
+      <label for="generateQRCheckbox">Also generate QR Code</label>
+    </div>
+    
+    <!-- Button triggers the main verse image generation -->
+    <button onclick="generateImage()">Generate Image</button>
+    
+    <!-- The main verse canvas (400×300) -->
+    <canvas id="canvas" width="400" height="300"></canvas>
+    
+    <!-- Container for the styled QR code (we'll append a new 400×300 canvas) -->
+    <div id="qrPreview" style="margin: 20px 0;"></div>
+    
+    <button onclick="downloadImage()">Download PNG Image</button>
+    <button onclick="downloadEPaperHeader()">Download EPaper Header</button>
+    <button onclick="downloadIndividualBin()">Download BIN Image(s)</button>
+    
+    <hr style="margin:30px 0; width:100%;">
+    <h2>Import CSV for Multiple Images</h2>
+    <input type="file" id="csvFile" accept=".csv">
+    <button onclick="processCSV()">Generate Images from CSV</button>
+    <button onclick="processCSVBin()">Generate BIN from CSV</button>
+    
+    <hr style="margin:30px 0; width:100%;">
+    <!-- UI elements for manual sequence preview -->
+    <div class="sequence-preview" style="margin-top: 10px;">
+      <label for="sequencePreview">Sequence Preview:</label>
+      <input type="text" id="sequencePosition" placeholder="1" style="width: 50px;">
+      <span>/</span>
+      <input type="text" id="sequenceTotal" placeholder="6" style="width: 50px;">
+      <button onclick="previewSequence()">Preview</button>
+    </div>
+  </div>
+
+  <script>
+    /***********************************************
+     * 0) BOOK CODES & URL GENERATION
+     ***********************************************/
+    // Mapping for Bible book codes (for bible.com)
+    const bookCodes = {
+      "Genesis": "gen",
+      "Exodus": "exo",
+      "Leviticus": "lev",
+      "Numbers": "num",
+      "Deuteronomy": "deu",
+      "Joshua": "jos",
+      "Judges": "jdg",
+      "Ruth": "rut",
+      "1 Samuel": "1sa",
+      "2 Samuel": "2sa",
+      "1 Kings": "1ki",
+      "2 Kings": "2ki",
+      "1 Chronicles": "1ch",
+      "2 Chronicles": "2ch",
+      "Ezra": "ezr",
+      "Nehemiah": "neh",
+      "Esther": "est",
+      "Job": "job",
+      "Psalms": "psa",
+      "Proverbs": "pro",
+      "Ecclesiastes": "ecc",
+      "Song of Songs": "sng",
+      "Isaiah": "isa",
+      "Jeremiah": "jer",
+      "Lamentations": "lam",
+      "Ezekiel": "ezk",
+      "Daniel": "dan",
+      "Hosea": "hos",
+      "Joel": "jol",
+      "Amos": "amo",
+      "Obadiah": "oba",
+      "Jonah": "jon",
+      "Micah": "mic",
+      "Nahum": "nam",
+      "Habakkuk": "hab",
+      "Zephaniah": "zep",
+      "Haggai": "hag",
+      "Zechariah": "zec",
+      "Malachi": "mal",
+      "Matthew": "mat",
+      "Mark": "mrk",
+      "Luke": "luk",
+      "John": "jhn",
+      "Acts": "act",
+      "Romans": "rom",
+      "1 Corinthians": "1co",
+      "2 Corinthians": "2co",
+      "Galatians": "gal",
+      "Ephesians": "eph",
+      "Philippians": "php",
+      "Colossians": "col",
+      "1 Thessalonians": "1th",
+      "2 Thessalonians": "2th",
+      "1 Timothy": "1ti",
+      "2 Timothy": "2ti",
+      "Titus": "tit",
+      "Philemon": "phm",
+      "Hebrews": "heb",
+      "James": "jas",
+      "1 Peter": "1pe",
+      "2 Peter": "2pe",
+      "1 John": "1jn",
+      "2 John": "2jn",
+      "3 John": "3jn",
+      "Jude": "jud",
+      "Revelation": "rev"
+    };
+
+    // Generate bible.com URL from a "Book Chapter:Verse" reference
+    function generateBibleUrlFromReference(ref) {
+      const parts = ref.match(/^(.*?)\s+(\d+):(\d+)$/);
+      if (!parts) return "";
+      const book = parts[1].trim();
+      const chapter = parts[2];
+      const verse = parts[3];
+      const code = bookCodes[book];
+      if (!code) return "";
+      return `https://www.bible.com/bible/111/${code}.${chapter}.${verse}`;
+    }
+
+    // Generate bible.com URL from CSV data (object with Book, Chapter, Verse)
+    function generateBibleUrlFromData(data) {
+      const book = (data.Book || "").trim();
+      const chapter = data.Chapter;
+      const verse = data.Verse;
+      const code = bookCodes[book];
+      if (!code) return "";
+      return `https://www.bible.com/bible/111/${code}.${chapter}.${verse}`;
+    }
+
+    /***********************************************
+     * 1) BIBLE VERSE IMAGE (400×300 canvas)
+     ***********************************************/
+    function generateImage() {
+      const ctx = canvas.getContext('2d');
+      const backgroundColor = isInverted ? "black" : "white";
+      const textColor = isInverted ? "white" : "black";
+      
+      // Clear and fill background
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Parse reference
+      const parts = currentReference.match(/^(.*?)\s+(\d+:\d+)$/);
+      if (!parts) return;
+      const book = parts[1];
+      const verseRef = parts[2];
+
+      // Draw the reference text at the top
+      ctx.font = "24px Arial";
+      ctx.textAlign = "left";
+      ctx.fillStyle = textColor;
+      const bookWidth = ctx.measureText(book).width;
+      const verseWidth = ctx.measureText(verseRef).width;
+      const totalWidth = bookWidth + verseWidth + 10;
+      const startX = (canvas.width - totalWidth) / 2;
+      ctx.fillText(book, startX, 40);
+      ctx.font = "bold 24px Arial";
+      ctx.fillText(verseRef, startX + bookWidth + 4, 40);
+
+      // Draw verse text
+      const maxWidth = 320;
+      let fontSize = 28;
+      ctx.font = `${fontSize}px Arial`;
+      const maxTextHeight = 180;
+      let lines = getLines(ctx, currentVerse, maxWidth, fontSize);
+      let textHeight = lines.length * fontSize * 1.4;
+      
+      while (textHeight > maxTextHeight && fontSize > 14) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px Arial`;
+        lines = getLines(ctx, currentVerse, maxWidth, fontSize);
+        textHeight = lines.length * fontSize * 1.4;
+      }
+
+      const padding = 40;
+      const rectHeight = Math.max(100, textHeight + padding);
+      const rectY = (canvas.height - rectHeight) / 2;
+      ctx.fillStyle = textColor;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(20, rectY, 360, rectHeight, 20);
+      } else {
+        ctx.rect(20, rectY, 360, rectHeight);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = backgroundColor;
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      const textY = rectY + (rectHeight - textHeight) / 2 + fontSize;
+      lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, textY + i * fontSize * 1.4);
+      });
+
+      // Draw the version at the bottom
+      ctx.fillStyle = textColor;
+      ctx.font = "18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(currentVersion, canvas.width / 2, canvas.height - 20);
+
+      // If QR is enabled, update it live
+      if (generateQR) {
+        updateQRCode();
+      } else {
+        qrPreviewDiv.innerHTML = '';
+      }
+    }
+
+    // Helper to split text into lines
+    function getLines(ctx, text, maxWidth, fontSize) {
+      ctx.font = `${fontSize}px Arial`;
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = '';
+
+      for (let word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+      return lines;
+    }
+
+    /***********************************************
+     * 2) STYLED QR CODE (400×300) + text at top
+     ***********************************************/
+    // Creates a single 400×300 canvas with black/white background,
+    // "Scan to read the verse in the bible app" at the top,
+    // and a 200×200 QR code centered below the text.
+    async function createStyledQRCode(qrUrl, isInverted) {
+      // 1. Create a hidden DIV to let QRCode.js generate a 200×200 <img>
+      const hiddenDiv = document.createElement('div');
+      hiddenDiv.style.display = 'none';
+      document.body.appendChild(hiddenDiv);
+
+      // 2. Foreground / background for the squares
+      const colorDark  = isInverted ? "#FFFFFF" : "#000000";
+      const colorLight = isInverted ? "#000000" : "#FFFFFF";
+
+      // 3. Generate the QR code <img> inside hiddenDiv
+      new QRCode(hiddenDiv, {
+        text: qrUrl,
+        width: 200,
+        height: 200,
+        colorDark: colorDark,
+        colorLight: colorLight,
+        correctLevel: QRCode.CorrectLevel.H
+      });
+
+      // 4. Wait a bit for the <img> to appear
+      await new Promise(r => setTimeout(r, 100));
+
+      // 5. Grab the generated <img>
+      const img = hiddenDiv.querySelector('img');
+      if (!img) {
+        document.body.removeChild(hiddenDiv);
+        throw new Error("QR code generation failed—no <img> found.");
+      }
+
+      // 6. Create a new 400×300 canvas
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = 400;
+      finalCanvas.height = 300;
+      const ctx = finalCanvas.getContext('2d');
+
+      // 7. Fill the background
+      ctx.fillStyle = isInverted ? "#000000" : "#FFFFFF";
+      ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+      // 8. Draw the header text
+      ctx.fillStyle = isInverted ? "#FFFFFF" : "#000000";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Scan to read the verse in the Bible app", 200, 40);
+
+      // 9. Center the 200×200 QR code below the text
+      const codeSize = 200;
+      const x = (400 - codeSize) / 2;
+      const y = 70; // for a nice margin
+      ctx.drawImage(img, x, y, codeSize, codeSize);
+
+      // 10. Clean up
+      document.body.removeChild(hiddenDiv);
+
+      // 11. Return the final canvas
+      return finalCanvas;
+    }
+
+    // Use the bible.com link for the QR code
+    async function updateQRCode() {
+      try {
+        qrPreviewDiv.innerHTML = ''; // Clear old
+        const qrUrl = generateBibleUrlFromReference(currentReference);  // <-- Use bible.com link
+        const styledCanvas = await createStyledQRCode(qrUrl, isInverted);
+        qrPreviewDiv.appendChild(styledCanvas);
+      } catch (error) {
+        console.error("Error generating QR code:", error);
+        alert("Failed to generate QR code: " + error.message);
+      }
+    }
+
+    /***********************************************
+     * 3) PREVIEW SEQUENCE / OTHER UTILITY
+     ***********************************************/
+    function previewSequence() {
+      const position = document.getElementById('sequencePosition').value;
+      const total = document.getElementById('sequenceTotal').value;
+      if (position && total) {
+        const sequence = `${position}/${total}`;
+        const ctx = canvas.getContext('2d');
+        generateImage();
+        const textColor = invertColorsCheckbox.checked ? "white" : "black";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "right";
+        ctx.fillStyle = textColor;
+        ctx.fillText(sequence, canvas.width - 10, canvas.height - 20);
+      }
+    }
+
+    /***********************************************
+     * 4) HOOKS & GLOBALS
+     ***********************************************/
+    const referenceInput = document.getElementById('reference');
+    const verseInput = document.getElementById('verse');
+    const versionInput = document.getElementById('version');
+    const canvas = document.getElementById('canvas');
+    const invertColorsCheckbox = document.getElementById('invertColorsCheckbox');
+    const generateQRCheckbox = document.getElementById('generateQRCheckbox');
+    const qrPreviewDiv = document.getElementById('qrPreview');
+
+    let currentReference = referenceInput.value;
+    let currentVerse = verseInput.value;
+    let currentVersion = versionInput.value;
+    let isInverted = invertColorsCheckbox.checked;
+    let generateQR = generateQRCheckbox.checked;
+
+    // Listen for user input
+    referenceInput.addEventListener('input', (e) => {
+      currentReference = e.target.value;
+      generateImage();
+    });
+    verseInput.addEventListener('input', (e) => {
+      currentVerse = e.target.value;
+      generateImage();
+    });
+    versionInput.addEventListener('input', (e) => {
+      currentVersion = e.target.value;
+      generateImage();
+    });
+    invertColorsCheckbox.addEventListener('change', (e) => {
+      isInverted = e.target.checked;
+      generateImage();
+    });
+    generateQRCheckbox.addEventListener('change', (e) => {
+      generateQR = e.target.checked;
+      generateImage();  // triggers updateQRCode() if generateQR is true
+    });
+
+    // Initialize the verse canvas once
+    generateImage();
+
+    /***********************************************
+     * 5) DOWNLOAD / BIN / CSV ETC.
+     ***********************************************/
+    async function downloadImage() {
+      try {
+        // Create a temporary canvas to combine both images
+        const combinedCanvas = document.createElement('canvas');
+        combinedCanvas.width = 400;
+        // If QR is enabled, make space for both the verse + QR
+        combinedCanvas.height = generateQR ? 600 : 300;
+        const ctx = combinedCanvas.getContext('2d');
+
+        // Draw the verse canvas
+        ctx.drawImage(canvas, 0, 0);
+
+        // If QR is enabled, draw the QR canvas below the verse
+        if (generateQR) {
+          const qrCanvas = qrPreviewDiv.querySelector('canvas');
+          if (qrCanvas) {
+            ctx.drawImage(qrCanvas, 0, 300);
+          }
+        }
+
+        // Create download link
+        const link = document.createElement('a');
+        link.download = 'bible-verse.png';
+        link.href = combinedCanvas.toDataURL();
+        link.click();
+      } catch (error) {
+        console.error("Error downloading image:", error);
+        alert("Failed to download image: " + error.message);
+      }
+    }
+
+    function convertCanvasToMonochrome(canvasElement, threshold = 128) {
+      const ctx = canvasElement.getContext('2d');
+      const { width, height } = canvasElement;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      let output = "";
+      let byte = 0;
+      let bitCount = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        const bitValue = (brightness < threshold) ? 1 : 0;
+        byte = (byte << 1) | bitValue;
+        bitCount++;
+        if (bitCount === 8) {
+          output += "0x" + byte.toString(16).padStart(2, '0') + ", ";
+          byte = 0;
+          bitCount = 0;
+        }
+      }
+      if (bitCount > 0) {
+        byte = byte << (8 - bitCount);
+        output += "0x" + byte.toString(16).padStart(2, '0') + ", ";
+      }
+      return output;
+    }
+
+    function hexToBinBlob(hexString) {
+      const hexValues = hexString.replace(/\s/g, '').split(',').filter(Boolean);
+      const byteArray = new Uint8Array(hexValues.length);
+      for (let i = 0; i < hexValues.length; i++) {
+        byteArray[i] = parseInt(hexValues[i], 16);
+      }
+      return new Blob([byteArray], { type: 'application/octet-stream'});
+    }
+
+    function downloadEPaperHeader() {
+      const headerData = convertCanvasToMonochrome(canvas, 128);
+      const headerContent = `const unsigned char epd_bitmap_YourDesign[] PROGMEM = { ${headerData} };`;
+      const blob = new Blob([headerContent], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.download = 'epd_bitmap_YourDesign.h';
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    }
+
+    // Process CSV -> PNG & header
+    async function processCSV() {
+      const fileInput = document.getElementById('csvFile');
+      if (fileInput.files.length === 0) {
+        alert("Please select a CSV file.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const csvText = e.target.result;
+        const rows = parseCSV(csvText);
+        if (rows.length < 2) {
+          alert("CSV file is empty or invalid.");
+          return;
+        }
+        const headers = rows[0];
+        const timeIndex = headers.indexOf("Time");
+        const bookIndex = headers.indexOf("Book");
+        const chapterIndex = headers.indexOf("Chapter");
+        const verseIndex = headers.indexOf("Verse");
+        const textIndex = headers.indexOf("Text");
+        if (timeIndex === -1 || bookIndex === -1 || chapterIndex === -1 || verseIndex === -1 || textIndex === -1) {
+          alert("CSV headers are missing required fields.");
+          return;
+        }
+        const zip = new JSZip();
+        let combinedHeaders = "// Combined header file\n\n";
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < headers.length) continue;
+          const data = {
+            Time: row[timeIndex],
+            Book: row[bookIndex],
+            Chapter: row[chapterIndex],
+            Verse: row[verseIndex],
+            Text: row[textIndex]
+          };
+          generateImageForData(data, versionInput.value);
+          const baseName = data.Time.replace(/:/g, '_');
+          const pngFileName = baseName + ".png";
+          const headerFileName = baseName + ".h";
+          const pngData = canvas.toDataURL().split(',')[1];
+          const headerData = `// Image for ${data.Time} - ${data.Book} ${data.Chapter}:${data.Verse}\nconst unsigned char epd_bitmap_${baseName}[] PROGMEM = { ${convertCanvasToMonochrome(canvas, 128)} };`;
+          zip.file(pngFileName, pngData, { base64: true });
+          zip.file(headerFileName, headerData);
+          combinedHeaders += headerData + "\n\n";
+
+          // Optional: sequence check
+          const sequence = findSequenceInCSV(rows, i);
+          if (sequence) {
+            const ctx = canvas.getContext('2d');
+            const textColor = invertColorsCheckbox.checked ? "white" : "black";
+            ctx.font = "16px Arial";
+            ctx.textAlign = "right";
+            ctx.fillStyle = textColor;
+            ctx.fillText(sequence, canvas.width - 10, canvas.height - 20);
+          }
+
+          // If QR is enabled, also generate a separate .h for the QR code
+          if (generateQR) {
+            const qrUrl = generateBibleUrlFromData(data);
+            // Generate a styled QR (400×300 with centered 200×200) using createStyledQRCode
+            const styledQRCanvas = await createStyledQRCode(qrUrl, isInverted);
+            const qrHeaderData = `// QR Image for ${data.Time} - ${data.Book} ${data.Chapter}:${data.Verse}\nconst unsigned char epd_bitmap_${baseName}_qr[] PROGMEM = { ${convertCanvasToMonochrome(styledQRCanvas, 128)} };`;
+            zip.file(baseName + "_qr.h", qrHeaderData);
+            combinedHeaders += qrHeaderData + "\n\n";
+          }
+        }
+        zip.file("bible_verses_combined.h", combinedHeaders);
+        const content = await zip.generateAsync({ type: "blob" });
+        const zipLink = document.createElement("a");
+        zipLink.href = URL.createObjectURL(content);
+        zipLink.download = "bible_verses.zip";
+        zipLink.click();
+      };
+      reader.readAsText(file);
+    }
+
+    // Process CSV -> BIN
+    async function processCSVBin() {
+      const fileInput = document.getElementById('csvFile');
+      if (fileInput.files.length === 0) {
+        alert("Please select a CSV file.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const csvText = e.target.result;
+        const rows = parseCSV(csvText);
+        if (rows.length < 2) {
+          alert("CSV file is empty or invalid.");
+          return;
+        }
+        const headers = rows[0];
+        const timeIndex = headers.indexOf("Time");
+        const bookIndex = headers.indexOf("Book");
+        const chapterIndex = headers.indexOf("Chapter");
+        const verseIndex = headers.indexOf("Verse");
+        const textIndex = headers.indexOf("Text");
+        if (timeIndex === -1 || bookIndex === -1 || chapterIndex === -1 || verseIndex === -1 || textIndex === -1) {
+          alert("CSV headers are missing required fields.");
+          return;
+        }
+        const zip = new JSZip();
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < headers.length) continue;
+          const data = {
+            Time: row[timeIndex],
+            Book: row[bookIndex],
+            Chapter: row[chapterIndex],
+            Verse: row[verseIndex],
+            Text: row[textIndex]
+          };
+          generateImageForData(data, versionInput.value);
+          
+          // Add sequence overlay as in manual mode
+          const sequence = findSequenceInCSV(rows, i);
+          if (sequence) {
+            const ctx = canvas.getContext('2d');
+            const textColor = invertColorsCheckbox.checked ? "white" : "black";
+            ctx.font = "16px Arial";
+            ctx.textAlign = "right";
+            ctx.fillStyle = textColor;
+            ctx.fillText(sequence, canvas.width - 10, canvas.height - 20);
+          }
+          
+          const baseName = data.Time.replace(/:/g, '_');
+          const headerData = convertCanvasToMonochrome(canvas, 128);
+          zip.file(baseName + ".bin", hexToBinBlob(headerData));
+
+          if (generateQR) {
+            const qrUrl = generateBibleUrlFromData(data);
+            // Generate a styled QR code canvas (400×300 with centered 200×200) as in manual mode.
+            const styledQRCanvas = await createStyledQRCode(qrUrl, isInverted);
+            const qrBinData = convertCanvasToMonochrome(styledQRCanvas, 128);
+            zip.file(baseName + "_qr.bin", hexToBinBlob(qrBinData));
+          }
+        }
+        const content = await zip.generateAsync({ type: "blob" });
+        const zipLink = document.createElement("a");
+        zipLink.href = URL.createObjectURL(content);
+        zipLink.download = "bible_verses_bin.zip";
+        zipLink.click();
+      };
+      reader.readAsText(file);
+    }
+
+    // A simple CSV parser that returns an array of arrays.
+    function parseCSV(text) {
+      const rows = [];
+      const lines = text.split(/\r?\n/);
+      for (let line of lines) {
+        if (!line.trim()) continue;
+        const row = [];
+        let inQuotes = false;
+        let field = '';
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              field += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            row.push(field);
+            field = '';
+          } else {
+            field += char;
+          }
+        }
+        row.push(field);
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function findSequenceInCSV(rows, currentRow) {
+  if (!rows || rows.length < 2) return null;
+
+  // Identify the relevant column indexes
+  const headers = rows[0];
+  const bookIndex = headers.indexOf("Book");
+  const chapterIndex = headers.indexOf("Chapter");
+  const verseIndex = headers.indexOf("Verse");
+  if (bookIndex === -1 || chapterIndex === -1 || verseIndex === -1) {
+    return null;
+  }
+
+  // Read the current row’s Book/Chapter/Verse
+  const currentBook = rows[currentRow][bookIndex];
+  const currentChapter = parseInt(rows[currentRow][chapterIndex], 10);
+  const currentVerse = parseInt(rows[currentRow][verseIndex], 10);
+
+  // --- 1) Find where the block starts by walking backward ---
+  let blockStart = currentRow;
+  for (let i = currentRow - 1; i >= 1; i--) {
+    const prevBook = rows[i][bookIndex];
+    const prevChapter = parseInt(rows[i][chapterIndex], 10);
+    const prevVerse = parseInt(rows[i][verseIndex], 10);
+
+    // Compare to the line immediately after it (i+1):
+    const nextVerseAfterPrev = parseInt(rows[i + 1][verseIndex], 10);
+
+    // If same book/chapter, and the next verse is exactly prevVerse + 1,
+    // then it's still consecutive. Otherwise, break.
+    if (prevBook === currentBook &&
+        prevChapter === currentChapter &&
+        nextVerseAfterPrev === prevVerse + 1) {
+      blockStart = i;
+    } else {
+      break;
+    }
+  }
+
+  // --- 2) Find where the block ends by walking forward ---
+  let blockEnd = currentRow;
+  for (let j = currentRow + 1; j < rows.length; j++) {
+    const nextBook = rows[j][bookIndex];
+    const nextChapter = parseInt(rows[j][chapterIndex], 10);
+    const nextVerse = parseInt(rows[j][verseIndex], 10);
+
+    // Compare to the line immediately before it (j-1):
+    const prevVerseBeforeNext = parseInt(rows[j - 1][verseIndex], 10);
+
+    // If same book/chapter, and the next verse is exactly previous + 1,
+    // then it's still consecutive. Otherwise, break.
+    if (nextBook === currentBook &&
+        nextChapter === currentChapter &&
+        nextVerse === prevVerseBeforeNext + 1) {
+      blockEnd = j;
+    } else {
+      break;
+    }
+  }
+
+  // --- 3) Determine how many lines in that block, and position of currentRow ---
+  const sequenceCount = blockEnd - blockStart + 1;
+  if (sequenceCount < 2) {
+    // If there is no actual consecutive block, return null
+    return null;
+  }
+
+  // The position is simply how far we are from the start
+  const position = currentRow - blockStart + 1;
+
+  // Return something like "3/7" or "8/9"
+  return `${position}/${sequenceCount}`;
+}
+
+
+    // Generate image for CSV data
+    function generateImageForData(data, version) {
+      const ctx = canvas.getContext('2d');
+      const backgroundColor = isInverted ? "black" : "white";
+      const textColor = isInverted ? "white" : "black";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const reference = data.Book + " " + data.Chapter + ":" + data.Verse;
+      const parts = reference.match(/^(.*?)\s+(\d+:\d+)$/);
+      if (!parts) return;
+      const book = parts[1];
+      const verseRef = parts[2];
+      ctx.font = "24px Arial";
+      ctx.textAlign = "left";
+      ctx.fillStyle = textColor;
+      const bookWidth = ctx.measureText(book).width;
+      const verseWidth = ctx.measureText(verseRef).width;
+      const totalWidth = bookWidth + verseWidth + 10;
+      const startX = (canvas.width - totalWidth) / 2;
+      ctx.fillText(book, startX, 40);
+      ctx.font = "bold 24px Arial";
+      ctx.fillText(verseRef, startX + bookWidth + 4, 40);
+      const maxWidth = 320;
+      let fontSize = 28;
+      ctx.font = `${fontSize}px Arial`;
+      const maxTextHeight = 180;
+      let lines = getLines(ctx, data.Text, maxWidth, fontSize);
+      let textHeight = lines.length * fontSize * 1.4;
+      while (textHeight > maxTextHeight && fontSize > 14) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px Arial`;
+        lines = getLines(ctx, data.Text, maxWidth, fontSize);
+        textHeight = lines.length * fontSize * 1.4;
+      }
+      const padding = 40;
+      const rectHeight = Math.max(100, textHeight + padding);
+      const rectY = (canvas.height - rectHeight) / 2;
+      ctx.fillStyle = textColor;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(20, rectY, 360, rectHeight, 20);
+      } else {
+        ctx.rect(20, rectY, 360, rectHeight);
+      }
+      ctx.fill();
+      ctx.fillStyle = backgroundColor;
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      const textY = rectY + (rectHeight - textHeight) / 2 + fontSize;
+      lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, textY + i * fontSize * 1.4);
+      });
+      ctx.fillStyle = textColor;
+      ctx.font = "18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(version, canvas.width / 2, canvas.height - 20);
+    }
+  </script>
+</body>
+</html>
