@@ -17,3 +17,8 @@ You should be able to use the code in the boaz tf test folder to get the bible v
 The python program is designed to help you select verses I have also included the .csv file I used for mine.
 
 You can use the website to generate the .bin files which you then drop onto the micro sd card, 32gb reccomended.
+
+
+
+https://www.elecrow.com/wiki/CrowPanel_ESP32_E-Paper_4.2-inch_Arduino_Tutorial.html#upload-the-code
+^ This is the settings in the Arduino IDE
