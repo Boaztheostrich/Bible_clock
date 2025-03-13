@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bible Verse Selection Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            width: 800px;
+            max-width: 100%;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        .button-group {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .verse-option {
+            border-radius: 4px;
+        }
+        #selectedVersesTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        #selectedVersesTable th, #selectedVersesTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #selectedVersesTable th {
+            background-color: #f4f4f4;
+        }
+        input, button {
+            padding: 8px;
+            margin: 4px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        .download-btn {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        .download-btn:hover {
+            background-color: #218838;
+        }
+        .download-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .mobile-download-link {
+            color: #28a745;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+        .mobile-download-link:hover {
+            color: #218838;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background-color: #bd2130;
+        }
+        .verse-option input[type="checkbox"]:checked + span {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-links">
+        <a href="bible-clock.html">← Back to Bible Clock</a>
+    </div>
+    
+    <div class="container">
+        <h1>Verse Selection Tool</h1>
+        <p>Use this tool to select Bible verses for each time slot. The selections can be exported as a CSV file for use with the Bible Clock.</p>
+        
+        <div class="download-section" style="margin-bottom: 20px;">
+            <p>First time here? Download the NIV Bible JSON file:</p>
+            <button id="downloadBtn" class="download-btn">Download NIV Bible JSON</button>
+            <p id="mobileDownloadMsg" style="display: none; margin-top: 10px;">
+                <a href="https://raw.githubusercontent.com/jadenzaleski/BibleTranslations/master/NIV/NIV_bible.json" 
+                   download="NIV_bible.json" 
+                   class="mobile-download-link">
+                    Click here if the download button doesn't work
+                </a>
+            </p>
+        </div>
+        
+        <div id="verseSelector">
+            <div class="input-group">
+                <label for="jsonFile">Upload Bible JSON file:</label>
+                <input type="file" id="jsonFile" accept=".json">
+            </div>
+            <div class="input-group">
+                <label for="startTime">Start Time (HH:MM):</label>
+                <input type="text" id="startTime" placeholder="00:00">
+                <button onclick="startVerseSelection()">Start Selection</button>
+            </div>
+            
+            <div id="selectionArea" style="display:none;">
+                <h3 id="currentTimeSlot"></h3>
+                <div id="verseOptions"></div>
+                <div class="button-group">
+                    <button onclick="selectVerse()">Select</button>
+                    <button onclick="skipVerse()">Skip</button>
+                    <button onclick="saveAndEnd()">Save & End</button>
+                </div>
+            </div>
+            
+            <div id="selectedVerses" style="margin-top: 20px;">
+                <table id="selectedVersesTable" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Reference</th>
+                            <th>Text</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Define the canonical order for the 66 books
+        const canonicalBooks = [
+            "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy",
+            "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel",
+            "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra",
+            "Nehemiah", "Esther", "Job", "Psalm", "Proverbs",
+            "Ecclesiastes", "Song Of Solomon", "Isaiah", "Jeremiah", "Lamentations",
+            "Ezekiel", "Daniel", "Hosea", "Joel", "Amos",
+            "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk",
+            "Zephaniah", "Haggai", "Zechariah", "Malachi",
+            "Matthew", "Mark", "Luke", "John", "Acts",
+            "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians",
+            "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy",
+            "2 Timothy", "Titus", "Philemon", "Hebrews", "James",
+            "1 Peter", "2 Peter", "1 John", "2 John", "3 John",
+            "Jude", "Revelation"
+        ];
+
+        // Global variables
+        let bibleText = null;
+        let currentHour = 0;
+        let currentMinute = 0;
+        let selectedVerses = [];
+
+        // Add event listener for Enter key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && document.getElementById('selectionArea').style.display === 'block') {
+                const selected = document.querySelectorAll('input[name="verseOption"]:checked');
+                if (selected.length > 0) {
+                    selectVerse();
+                }
+            }
+        });
+
+        // File upload handler
+        document.getElementById('jsonFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        
+                        // Validate data structure
+                        let isValid = true;
+                        let verseCount = 0;
+                        
+                        for (const [book, chapters] of Object.entries(data)) {
+                            if (typeof chapters !== 'object') {
+                                isValid = false;
+                                break;
+                            }
+                            for (const [chapter, verses] of Object.entries(chapters)) {
+                                if (typeof verses !== 'object') {
+                                    isValid = false;
+                                    break;
+                                }
+                                verseCount += Object.keys(verses).length;
+                            }
+                        }
+                        
+                        if (!isValid) {
+                            throw new Error('Invalid Bible data structure');
+                        }
+                        
+                        console.log(`Loaded Bible data with ${Object.keys(data).length} books and ${verseCount} total verses`);
+                        bibleText = data;
+                        document.getElementById('startTime').disabled = false;
+                        alert('Bible data loaded successfully!');
+                    } catch (error) {
+                        alert('Error loading JSON file: ' + error.message);
+                        console.error('JSON parsing error:', error);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Disable start time input until JSON is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startTime').disabled = true;
+        });
+
+        function findValidVerses(chapter, verse) {
+            console.log(`Searching for chapter ${chapter}, verse ${verse}`);
+            const validVerses = [];
+            try {
+                for (const [book, chapters] of Object.entries(bibleText)) {
+                    const chapterStr = chapter.toString();
+                    const verseStr = verse.toString();
+                    
+                    if (chapters[chapterStr] && chapters[chapterStr][verseStr]) {
+                        console.log(`Found match in ${book}`);
+                        validVerses.push([book, chapterStr, verseStr, chapters[chapterStr][verseStr]]);
+                    }
+                }
+                console.log(`Found ${validVerses.length} valid verses`);
+                
+                validVerses.sort((a, b) => 
+                    canonicalBooks.indexOf(a[0]) - canonicalBooks.indexOf(b[0])
+                );
+                return validVerses;
+            } catch (error) {
+                console.error('Error in findValidVerses:', error);
+                return [];
+            }
+        }
+
+        function displayVerseOptions(timeSlot, options) {
+            console.log(`Displaying options for ${timeSlot}`);
+            const selectionArea = document.getElementById('selectionArea');
+            const timeSlotElement = document.getElementById('currentTimeSlot');
+            const optionsElement = document.getElementById('verseOptions');
+            
+            try {
+                selectionArea.style.display = 'block';
+                timeSlotElement.textContent = `Select a verse for ${timeSlot}`;
+                
+                const optionsHTML = options.map((option, index) => `
+                    <div class="verse-option" style="margin: 10px 0; padding: 10px; background: ${index % 2 ? '#f8f8f8' : 'white'}">
+                        <label>
+                            <input type="checkbox" name="verseOption" value="${index}">
+                            <span>${option[0]} ${option[1]}:${option[2]} - ${option[3]}</span>
+                        </label>
+                    </div>
+                `).join('');
+                
+                optionsElement.innerHTML = optionsHTML;
+                console.log('Options displayed successfully');
+            } catch (error) {
+                console.error('Error in displayVerseOptions:', error);
+                alert('An error occurred while displaying verses. Check the console for details.');
+            }
+        }
+
+        function startVerseSelection() {
+            if (!bibleText) {
+                alert('Please upload a Bible JSON file first');
+                return;
+            }
+
+            const startTimeInput = document.getElementById('startTime').value;
+            let [hour, minute] = startTimeInput ? startTimeInput.split(':').map(Number) : [0, 0];
+            
+            if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                alert('Please enter a valid time in HH:MM format');
+                return;
+            }
+            
+            currentHour = hour;
+            currentMinute = minute;
+            selectedVerses = [];
+            document.getElementById('selectedVersesTable').style.display = 'table';
+            
+            showNextTimeSlot();
+        }
+
+        function showNextTimeSlot() {
+            if (currentHour >= 24) {
+                finishSelection();
+                return;
+            }
+            
+            const timeSlot = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+            console.log(`Looking for verses for time slot: ${timeSlot}`);
+            
+            try {
+                const options = findValidVerses(currentHour, currentMinute);
+                console.log(`Found ${options.length} options for ${timeSlot}`);
+                
+                if (options.length === 0) {
+                    console.log(`No verses found for ${timeSlot}, moving to next time`);
+                    incrementTime();
+                    showNextTimeSlot();
+                    return;
+                }
+                
+                displayVerseOptions(timeSlot, options);
+            } catch (error) {
+                console.error('Error in showNextTimeSlot:', error);
+                alert('An error occurred while finding verses. Check the console for details.');
+            }
+        }
+
+        function incrementTime() {
+            currentMinute++;
+            if (currentMinute >= 60) {
+                currentMinute = 0;
+                currentHour++;
+            }
+        }
+
+        function selectVerse() {
+            const selected = document.querySelectorAll('input[name="verseOption"]:checked');
+            if (selected.length === 0) {
+                alert('Please select at least one verse or skip this time slot');
+                return;
+            }
+            
+            const options = findValidVerses(currentHour, currentMinute);
+            const timeSlot = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+            
+            selected.forEach(selection => {
+                const selectedOption = options[selection.value];
+                selectedVerses.push([timeSlot, ...selectedOption]);
+            });
+            
+            updateSelectedVersesTable();
+            
+            incrementTime();
+            showNextTimeSlot();
+        }
+
+        function skipVerse() {
+            incrementTime();
+            showNextTimeSlot();
+        }
+
+        function saveAndEnd() {
+            finishSelection();
+        }
+
+        function updateSelectedVersesTable() {
+            const tbody = document.querySelector('#selectedVersesTable tbody');
+            tbody.innerHTML = ''; // Clear the table first
+            
+            selectedVerses.forEach((verse, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${verse[0]}</td>
+                    <td>${verse[1]} ${verse[2]}:${verse[3]}</td>
+                    <td>${verse[4]}</td>
+                    <td><button class="delete-btn" onclick="deleteVerse(${index})">Delete</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function deleteVerse(index) {
+            if (index >= 0 && index < selectedVerses.length) {
+                selectedVerses.splice(index, 1);
+                updateSelectedVersesTable();
+            }
+        }
+
+        function finishSelection() {
+            const csv = generateCSV();
+            downloadCSV(csv);
+        }
+
+        function escapeCSVField(field) {
+            if (field === null || field === undefined) {
+                return '';
+            }
+            
+            // Convert to string
+            let text = String(field);
+            
+            // If the field contains quotes, commas, or newlines, we need to escape it
+            if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+                // Double up any quotes
+                text = text.replace(/"/g, '""');
+                // Wrap in quotes
+                return `"${text}"`;
+            }
+            
+            return text;
+        }
+
+        function generateCSV() {
+            const header = ['Time', 'Book', 'Chapter', 'Verse', 'Text'];
+            
+            // Start with header row
+            let csvContent = header.map(escapeCSVField).join(',') + '\n';
+            
+            // Add each verse row
+            selectedVerses.forEach(verse => {
+                const row = [
+                    verse[0],             // Time
+                    verse[1],             // Book
+                    verse[2],             // Chapter
+                    verse[3],             // Verse
+                    verse[4]              // Text
+                ];
+                
+                csvContent += row.map(escapeCSVField).join(',') + '\n';
+            });
+            
+            return csvContent;
+        }
+
+        function downloadCSV(csv) {
+            // Specify UTF-8 encoding in the BOM (Byte Order Mark)
+            const BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([BOM, csv], { type: 'text/csv;charset=utf-8' });
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            
+            a.href = url;
+            a.download = `selected_verses_${timestamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', async () => {
+            try {
+                // Check if mobile device
+                if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                    // Show the direct download link for mobile users
+                    document.getElementById('mobileDownloadMsg').style.display = 'block';
+                    // Open in new tab for mobile
+                    window.open('https://raw.githubusercontent.com/jadenzaleski/BibleTranslations/master/NIV/NIV_bible.json', '_blank');
+                    return;
+                }
+
+                // Desktop download logic
+                const url = 'https://raw.githubusercontent.com/jadenzaleski/BibleTranslations/master/NIV/NIV_bible.json';
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { 
+                    type: 'application/json'
+                });
+                
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = 'NIV_bible.json';
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Download failed. Please try again or use the direct download link below.');
+                document.getElementById('mobileDownloadMsg').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
